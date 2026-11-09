@@ -1,47 +1,74 @@
 
-mport datetime
+import datetime
 import urllib.parse
 import streamlit as st
 
+# Configuración de la página
 st.set_page_config(page_title="Sistema de Citas - Barbería", page_icon="💈")
-
 st.title("💈 Sistema de Citas - Barbería")
 
+# Inicializar el estado de la sesión para las citas de forma segura
 if "lista_citas" not in st.session_state:
     st.session_state.lista_citas = []
 
+# --- FORMULARIO DE NUEVA CITA ---
 st.subheader("Agendar Nueva Cita")
-nombre = st.text_input("Nombre del cliente")
-telefono = st.text_input("Teléfono (ej. 829...)")
-hora_str = st.text_input("Hora de la cita (formato 24h, ej. 14:30)")
 
-if st.button("Guardar Cita"):
-    if nombre and telefono and hora_str:
-        try:
-            hora_cita = datetime.datetime.strptime(hora_str, "%H:%M").time()
+# Formulario limpio que limpia los campos al enviar el registro
+with st.form("formulario_cita", clear_on_submit=True):
+    nombre = st.text_input("Nombre del cliente")
+    telefono = st.text_input("Teléfono (ej. 8291234567)")
+    
+    # Selector de hora nativo corregido utilizando la sintaxis de tiempo correcta
+    hora_cita_obj = st.time_input("Hora de la cita", value=datetime.time(14, 30))
+    
+    boton_guardar = st.form_submit_button("Guardar Cita")
+
+    if boton_guardar:
+        if nombre and telefono:
+            # Formateamos la hora en formato de 24 horas para la vista de la tabla
+            hora_str = hora_cita_obj.strftime("%H:%M")
+            
             nueva_cita = {
                 "nombre": nombre,
                 "telefono": telefono,
                 "hora_str": hora_str,
-                "hora_obj": hora_cita,
+                "hora_obj": hora_cita_obj,
                 "avisado": False
             }
+            
+            # Insertar nueva cita y reordenar el itinerario cronológicamente
             st.session_state.lista_citas.append(nueva_cita)
+            
+            try:
+                st.session_state.lista_citas = sorted(st.session_state.lista_citas, key=lambda x: x["hora_obj"])
+            except TypeError:
+                # Si quedan residuos de citas en texto de sesiones previas, limpia la caché automáticamente
+                st.session_state.lista_citas = [nueva_cita]
+                
             st.success(f"¡Cita guardada con éxito para {nombre} a las {hora_str}!")
-        except ValueError:
-            st.error("Formato de hora incorrecto. Usa HH:MM (ej. 14:30).")
-    else:
-        st.warning("Por favor completa todos los campos.")
+        else:
+            st.warning("Por favor completa los campos de Nombre y Teléfono.")
 
+# --- LISTA DE CITAS PENDIENTES ---
 st.subheader("Citas Pendientes")
+
 if len(st.session_state.lista_citas) > 0:
+    # Despliegue limpio en tres secciones paralelas alineadas por registro
     for i, c in enumerate(st.session_state.lista_citas):
-        st.write(f"*{i+1}. Hora:* {c['hora_str']} | *Cliente:* {c['nombre']} | *Tel:* {c['telefono']}")
+        col1, col2, col3 = st.columns(3)
         
-        mensaje = f"¡Hola {c['nombre']}! 💈 Te recordamos tu cita en la barbería a las {c['hora_str']}."
-        mensaje_codificado = urllib.parse.quote(mensaje)
-        link_whatsapp = f"https://wa.me/{c['telefono']}?text={mensaje_codificado}"
-        
-        st.markdown(f"[💬 Enviar WhatsApp a {c['nombre']}]({link_whatsapp})", unsafe_allow_html=True)
+        with col1:
+            st.write(f"⏱️ **{c['hora_str']}**")
+        with col2:
+            st.write(f"👤 {c['nombre']} ({c['telefono']})")
+        with col3:
+            # Enlace codificado de WhatsApp para evitar errores con espacios o caracteres especiales
+            mensaje = f"¡Hola {c['nombre']}! 💈 Te recordamos tu cita en la barbería hoy a las {c['hora_str']}."
+            mensaje_codificado = urllib.parse.quote(mensaje)
+            link_whatsapp = f"https://wa.me{c['telefono']}?text={mensaje_codificado}"
+            st.markdown(f"[💬 Recordatorio]({link_whatsapp})", unsafe_allow_html=True)
+            
+        st.divider() # Línea de separación estética
 else:
     st.info("No hay citas programadas en este momento.")
